@@ -1,85 +1,94 @@
 import logging
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-)
+from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
-    CallbackQueryHandler,
     ContextTypes,
     filters,
 )
 from openai import OpenAI
 
-# Токены (замени на свои)
-TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-OPENAI_API_KEY = "YOUR_OPENAI_API_KEY"
+# Токены
+TELEGRAM_TOKEN = "7735350621:AAFnJsLyhVH1dwMj3Aoaf63byOj6gwHWRDQ"
+OPENAI_API_KEY = "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"
 
-# Инициализация OpenAI клиента
 client = OpenAI(api_key=OPENAI_API_KEY)
-
-# Логирование
 logging.basicConfig(level=logging.INFO)
 
-# Список доступных моделей для переключения
-AVAILABLE_MODELS = ["gpt-3.5-turbo", "gpt-4", "gpt-4o-mini"]
+MAX_HISTORY_LEN = 10  # максимальное число сообщений в истории
 
-# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Установим модель по умолчанию для пользователя, если не установлена
-    if "model" not in context.user_data:
-        context.user_data["model"] = "gpt-3.5-turbo"
-
     await update.message.reply_text(
-        f"Привет! Сейчас используется модель: {context.user_data['model']}\n"
-        "Напиши что-нибудь, и я отвечу.\n"
-        "Чтобы сменить модель, введи /model"
+        "Привет! Я бот на базе ChatGPT. Напиши мне что-нибудь, и я отвечу. "
+        "Если хочешь картинку — добавь в запрос фразу 'сгенерируй картинку:'."
     )
+    # Инициализируем историю для пользователя
+    context.user_data['history'] = []
 
-# Команда /model - показать кнопки выбора модели
-async def model_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton(model, callback_data=model)] for model in AVAILABLE_MODELS
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Выбери модель:", reply_markup=reply_markup)
+async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Бот остановлен. До встречи!")
+    await context.application.stop()
 
-# Обработчик нажатия кнопок выбора модели
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    selected_model = query.data
-    context.user_data["model"] = selected_model
-
-    await query.edit_message_text(text=f"Модель успешно переключена на: {selected_model}")
-
-# Обработка текстовых сообщений с учётом выбранной модели
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text.strip()
-    model = context.user_data.get("model", "gpt-3.5-turbo")
+    history = context.user_data.get('history', [])
+
+    # Добавляем в историю новое сообщение от пользователя
+    history.append({"role": "user", "content": user_input})
+
+    # Обрезаем историю, если слишком длинная
+    if len(history) > MAX_HISTORY_LEN:
+        history = history[-MAX_HISTORY_LEN:]
 
     try:
         chat_response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": user_input}]
+            model="gpt-3.5-turbo",
+            messages=history
         )
         reply_text = chat_response.choices[0].message.content.strip()
-        await update.message.reply_text(f"[{model}]: {reply_text}")
+
+        # Добавляем ответ в историю
+        history.append({"role": "assistant", "content": reply_text})
+        if len(history) > MAX_HISTORY_LEN:
+            history = history[-MAX_HISTORY_LEN:]
+
+        # Сохраняем обновленную историю
+        context.user_data['history'] = history
+
+        await update.message.reply_text(reply_text)
     except Exception as e:
         logging.error(f"Ошибка при обращении к ChatGPT: {e}")
         await update.message.reply_text(f"Ошибка при обращении к ChatGPT:\n{e}")
+        return
 
-# Главная функция
+    # Генерация изображения
+    if "сгенерируй картинку:" in user_input.lower():
+        prompt_start = user_input.lower().find("сгенерируй картинку:")
+        image_prompt = user_input[prompt_start + len("сгенерируй картинку:"):].strip()
+
+        if not image_prompt:
+            await update.message.reply_text("Укажи, что нарисовать после 'сгенерируй картинку:'.")
+            return
+
+        try:
+            image_response = client.images.generate(
+                model="dall-e-3",
+                prompt=image_prompt,
+                size="1024x1024",
+                n=1
+            )
+            image_url = image_response.data[0].url
+            await update.message.reply_photo(photo=image_url, caption="Вот твоя картинка:")
+        except Exception as e:
+            logging.error(f"Ошибка генерации картинки: {e}")
+            await update.message.reply_text(f"Ошибка при генерации картинки:\n{e}")
+
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("model", model_command))
-    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(CommandHandler("stop", stop))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     logging.info("Бот запущен...")
