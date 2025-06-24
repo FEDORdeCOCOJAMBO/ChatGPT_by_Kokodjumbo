@@ -1,5 +1,3 @@
-python /Users/fedorkirsanov/Desktop/Kokodjumbo_bot.py
-
 import logging
 from telegram import Update
 from telegram.ext import (
