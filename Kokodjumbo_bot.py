@@ -1,3 +1,5 @@
+python /Users/fedorkirsanov/Desktop/Kokodjumbo_bot.py
+
 import logging
 from telegram import Update
 from telegram.ext import (
@@ -9,40 +11,60 @@ from telegram.ext import (
 )
 from openai import OpenAI
 
-# 🔐 Токены
-TELEGRAM_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-OPENAI_API_KEY = "YOUR_OPENAI_API_KEY"
+# Токены
+TELEGRAM_TOKEN = "***"
+OPENAI_API_KEY = "***"
 
-# OpenAI клиент
 client = OpenAI(api_key=OPENAI_API_KEY)
-
-# Логирование
 logging.basicConfig(level=logging.INFO)
 
-# Максимальная длина истории сообщений
-MAX_HISTORY_LEN = 10
+MAX_HISTORY_LEN = 10  # максимальное число сообщений в истории
 
-
-# Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Привет! Я бот на базе ChatGPT. Напиши мне что-нибудь, и я отвечу.\n"
-        "Хочешь картинку? Напиши: 'сгенерируй картинку: арбуз на пляже'."
+        "Привет! Я бот на базе ChatGPT. Напиши мне что-нибудь, и я отвечу. "
+        "Если хочешь картинку — добавь в запрос фразу 'сгенерируй картинку:'."
     )
-    context.user_data["history"] = []
+    # Инициализируем историю для пользователя
+    context.user_data['history'] = []
 
-
-# Команда /stop
 async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Бот остановлен. До встречи!")
     await context.application.stop()
 
-
-# Обработка сообщений
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text.strip()
+    history = context.user_data.get('history', [])
 
-    # Обработка генерации изображения отдельно
+    # Добавляем в историю новое сообщение от пользователя
+    history.append({"role": "user", "content": user_input})
+
+    # Обрезаем историю, если слишком длинная
+    if len(history) > MAX_HISTORY_LEN:
+        history = history[-MAX_HISTORY_LEN:]
+
+    try:
+        chat_response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=history
+        )
+        reply_text = chat_response.choices[0].message.content.strip()
+
+        # Добавляем ответ в историю
+        history.append({"role": "assistant", "content": reply_text})
+        if len(history) > MAX_HISTORY_LEN:
+            history = history[-MAX_HISTORY_LEN:]
+
+        # Сохраняем обновленную историю
+        context.user_data['history'] = history
+
+        await update.message.reply_text(reply_text)
+    except Exception as e:
+        logging.error(f"Ошибка при обращении к ChatGPT: {e}")
+        await update.message.reply_text(f"Ошибка при обращении к ChatGPT:\n{e}")
+        return
+
+    # Генерация изображения
     if "сгенерируй картинку:" in user_input.lower():
         prompt_start = user_input.lower().find("сгенерируй картинку:")
         image_prompt = user_input[prompt_start + len("сгенерируй картинку:"):].strip()
@@ -63,30 +85,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logging.error(f"Ошибка генерации картинки: {e}")
             await update.message.reply_text(f"Ошибка при генерации картинки:\n{e}")
-        return  # прекращаем обработку после отправки изображения
 
-    # История чата
-    history = context.user_data.get("history", [])
-    history.append({"role": "user", "content": user_input})
-    history = history[-MAX_HISTORY_LEN:]
-
-    try:
-        chat_response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=history
-        )
-        reply_text = chat_response.choices[0].message.content.strip()
-
-        history.append({"role": "assistant", "content": reply_text})
-        context.user_data["history"] = history[-MAX_HISTORY_LEN:]
-
-        await update.message.reply_text(reply_text)
-    except Exception as e:
-        logging.error(f"Ошибка при обращении к ChatGPT: {e}")
-        await update.message.reply_text(f"Ошибка при обращении к ChatGPT:\n{e}")
-
-
-# Основной запуск
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
@@ -97,6 +96,6 @@ def main():
     logging.info("Бот запущен...")
     app.run_polling()
 
-
 if __name__ == "__main__":
     main()
+
