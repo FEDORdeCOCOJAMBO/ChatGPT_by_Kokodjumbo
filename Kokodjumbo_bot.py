@@ -73,7 +73,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         try:
             image_response = client.images.generate(
-                model="gpt-4o-mini",
+                model="dall-e-3",
                 prompt=image_prompt,
                 size="1024x1024",
                 n=1
