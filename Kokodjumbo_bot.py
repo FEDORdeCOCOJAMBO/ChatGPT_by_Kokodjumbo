@@ -12,8 +12,8 @@ from telegram.ext import (
 from openai import OpenAI
 
 # Токены
-TELEGRAM_TOKEN = "***"
-OPENAI_API_KEY = "***"
+TELEGRAM_TOKEN = "7735350621:AAFnJsLyhVH1dwMj3Aoaf63byOj6gwHWRDQ"
+OPENAI_API_KEY = "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"
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 logging.basicConfig(level=logging.INFO)
