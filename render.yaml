@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: kokodjumbo-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python Kokodjumbo_bot.py
+    runtime: python3.11
