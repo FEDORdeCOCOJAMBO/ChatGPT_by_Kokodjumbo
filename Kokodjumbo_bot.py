@@ -8,10 +8,10 @@ from telegram.ext import (
     filters,
 )
 from openai import OpenAI
-
+import os
 # Токены
-TELEGRAM_TOKEN = "***"
-OPENAI_API_KEY = "***"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 logging.basicConfig(level=logging.INFO)
